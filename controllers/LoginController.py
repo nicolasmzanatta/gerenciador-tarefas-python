@@ -1,6 +1,9 @@
 from flask import Blueprint, request, Response
 from flask_restx import Namespace, Resource, fields
 from dtos.ErroDTO import ErroDTO
+from dtos.UsuarioDTO import UsuarioLoginDTO
+from services import JWTService
+from services.UsuarioService import UsuarioService
 
 import json
 
@@ -30,9 +33,46 @@ class Login(Resource):
         try:
             body = request.get_json()
 
-            if not body or "login" not in body or "senha" not in body:
-                return Response(json.dumps(ErroDTO("Parâmetros de entrada inválidos", 400).__dict__), status=400, mimetype='application/json')
+            erros = []
 
-            return Response("Login autenticado com sucesso", status=200, mimetype='application/json')
-        except Exception as e:
-            return Response(json.dumps(ErroDTO("Não foi possível efetuar o login, tente novamente", 500).__dict__), status=500, mimetype='application/json')
+            if not body:
+                return Response(
+                    json.dumps(ErroDTO(400, "Body da requisição está vazio.").__dict__),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            if not "login" in body:
+                erros.append("Campo 'login' é obrigatório.")
+
+            if not "senha" in body:
+                erros.append("Campo 'senha' é obrigatório.")
+
+            if erros:
+                return Response(
+                    json.dumps(ErroDTO(400, erros).__dict__),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            usuario_encontrado = UsuarioService().login(body["login"], body["senha"])
+
+            if usuario_encontrado:
+                token = JWTService.gerar_token(usuario_encontrado.id)
+
+                return Response(
+                    json.dumps(UsuarioLoginDTO(usuario_encontrado.nome, usuario_encontrado.email, token).__dict__),
+                    status=200,
+                    mimetype='application/json'
+                )
+
+            return Response(
+                json.dumps(ErroDTO(401, "Usuário ou Senha incorretos, favor tentar novamente.").__dict__),
+                status=401,
+                mimetype='application/json')
+        except Exception:
+            return Response(
+                json.dumps(ErroDTO(500, "Não foi possível efetuar o login, tente novamente.").__dict__),
+                status=500,
+                mimetype='application/json'
+            )
